@@ -1,0 +1,29 @@
+{
+  "name": "bikedujour-strava-api",
+  "version": "0.0.1",
+  "description": "Simple Node wrapper for the Strava API (v3)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bikedujour/strava-api.git"
+  },
+  "keywords": [
+    "strava",
+    "api",
+    "strava-api",
+    "node-strava",
+    "strava-v3"
+  ],
+  "author": "@iamstuartwilson, @lpww",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bikedujour/strava-api/issues"
+  },
+  "homepage": "https://github.com/bikedujour/strava-api",
+  "dependencies": {
+    "request": "^2.55.0"
+  }
+}
