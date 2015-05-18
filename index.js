@@ -43,6 +43,21 @@ module.exports = function(opts) {
             strava.token = token;
         }
 
+        api.buildAccessRequest = function(params) {
+            params = params || {};
+            params.response_type = 'code';
+            params.redirect_uri = opts.redirect_uri;
+            params.client_id = opts.client_id;
+            
+            return setupRequestUrl('authorize', params, 'auth');
+        };
+
+        api.tokenExchange = function(code, cb) {
+            //swap temp code for permanent token and pass token into cb
+                //make post request to strava.url.auth /token
+                //call cb(data)
+        }
+
         return api;
     }
 
@@ -52,11 +67,12 @@ module.exports = function(opts) {
         return new Error('bikedujour.strava-api.error: ' + message);
     }
 
-    var setupRequestUrl = function(path, params) {
+    var setupRequestUrl = function(path, params, type) {
         params = params || {};
+        type = type || 'api';
         path += path.substr(-1) === '/' ? '' : '/';
 
-        return [strava.url.api, path, '?',querystring.stringify(params)].join('');
+        return [strava.url[type], path, '?',querystring.stringify(params)].join('');
     }
 
     // Parses JSON to object
