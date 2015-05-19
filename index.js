@@ -1,11 +1,14 @@
 var request = require('request');
 var querystring = require('querystring');
+var extend = require('util')._extend;
 
 module.exports = function(opts) {
+    opts = opts || {};
+
     // API base URL
     const baseUrl = 'https://www.strava.com/';
 
-    // API INFO
+    // API info
     const strava = {
         url: {
             api: baseUrl + 'api/v3/',
@@ -13,71 +16,73 @@ module.exports = function(opts) {
         }
     }
 
+    // Client info
+    const client = {
+        credentials: {
+            access_token: false,
+            client_id: false,
+            client_secret: false
+        }
+    }
+
+    // HTTP request types to support
+    const supportedHttpVerbs = ['get', 'post', 'put', 'del'];
+
     // Our returned client
     var api = {}
 
     // Sets up our client
     var init = function() {
-        if (typeof opts.token === 'string') {
-            strava.token = opts.token
+        // Assign credentials
+        for (prop in opts) {
+            setCredential(prop, opts[prop]);
         }
 
         // Assign methods to API
-        api.get = function(path, params, cb) {
-            return addRequestMethod('get', path, params, cb);
-        };
+        supportedHttpVerbs.map(function(verb) {
+            api[verb] = addRequestMethod(verb);
 
-        api.post = function(path, params, cb) {
-            return addRequestMethod('post', path, params, cb);
-        };
+            return verb;
+        });
 
-        api.put = function(path, params, cb) {
-            return addRequestMethod('put', path, params, cb);
-        };
+        api.setCredential = setCredential;
+        api.getAuthUrl = getAuthUrl;
 
-        api.delete = function(path, params, cb) {
-            return addRequestMethod('delete', path, params, cb);
-        };
-
-        api.setAccessToken = function(token) {
-            strava.token = token;
-        }
-
-        api.buildAccessRequest = function(params) {
-            params = params || {};
-            params.response_type = 'code';
-            params.redirect_uri = opts.redirect_uri;
-            params.client_id = opts.client_id;
-            
-            return setupRequestUrl('authorize', params, 'auth');
-        };
-
-        api.tokenExchange = function(code, cb) {
-            //swap temp code for permanent token and pass token into cb
-                //make post request to strava.url.auth /token
-                //call cb(data)
-        }
+        api.tokenExchange = tokenExchange;
 
         return api;
     }
 
+    // Throw module specific error
     var error = function(message) {
         message = message || '';
 
         return new Error('bikedujour.strava-api.error: ' + message);
     }
 
+    // Set client credential
+    var setCredential = function(name, val) {
+        if (name in client.credentials) {
+            client.credentials[name] = val;
+        }
+    }
+
+    // Get client credential
+    var getCredential = function(name) {
+        return client.credentials[name];
+    }
+
+    // Setup an API request URL
     var setupRequestUrl = function(path, params, type) {
         params = params || {};
         type = type || 'api';
-        path += path.substr(-1) === '/' ? '' : '/';
+        path = path.substr(-1) === '/' ? path.substr(0, path.length - 1) : path;
 
         return [strava.url[type], path, '?',querystring.stringify(params)].join('');
     }
 
     // Parses JSON to object
     var parseResponse = function(res) {
-
         if (typeof res === 'string') {
             try{
                 return JSON.parse(res);
@@ -90,15 +95,17 @@ module.exports = function(opts) {
     }
 
     // Abstract requester
-    var req = function(method, path, params, cb) {
-        if (typeof strava.token !== 'string') {
+    var makeRequest = function(method, path, params, cb) {
+        var accessToken = getCredential('access_token');
+
+        if (typeof accessToken !== 'string') {
             throw(error('Invalid API access token'));
         }
 
         return request[method]({
             url: setupRequestUrl(path, params),
             headers: {
-                Authorization: 'Bearer ' + strava.token
+                Authorization: 'Bearer ' + accessToken
             }
         }, function(err, res, body) {
             if (res.statusCode !== 200) {
@@ -110,13 +117,60 @@ module.exports = function(opts) {
     }
 
     // Register our HTTP verbs
-    var addRequestMethod = function(method, path, params, cb) {
-        if (typeof params === 'function') {
-            cb = params;
-            params = {};
+    var addRequestMethod = function(method) {
+        return function(path, params, cb) {
+            if (typeof params === 'function') {
+                cb = params;
+                params = {};
+            }
+
+            return makeRequest(method, path, params, cb);
+        }
+    }
+
+    // Returns an authentication URL
+    var getAuthUrl = function(params) {
+        if (typeof params !== 'object') {
+            throw(error('Please specify a parameter object'));
         }
 
-        return req(method, path, params, cb);
+        if (! params.redirect_uri) {
+            throw(error('Please specify a "redirect_uri" parameter'));
+        }
+
+        var requestParams = extend({
+            client_id: getCredential('client_id'),
+            response_type: 'code',
+        }, params);
+
+        return setupRequestUrl('authorize', requestParams, 'auth');
+    }
+
+    // Exchange code for permanent access_token
+    var tokenExchange = function(code, cb) {
+        var params = {
+            code: code,
+            client_id: getCredential('client_id'),
+            client_secret: getCredential('client_secret')
+        }
+
+        console.log(setupRequestUrl('token', params, 'auth'));
+
+        return request.post(setupRequestUrl('token', params, 'auth'), function(err, res, body) {
+            if (res.statusCode !== 200) {
+                err = error('statusCode (' + res.statusCode + ')');
+            }
+
+            console.log(body);
+
+            var data = parseResponse(body);
+
+            if (data.access_token) {
+                setCredential('access_token', data.access_token);
+            }
+
+            return cb(err, data);
+        });
     }
 
     return init();
